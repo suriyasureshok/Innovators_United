@@ -6,12 +6,10 @@ from datetime import datetime
 from bridge_hub.models import IntentAlert
 from bridge_hub.advisory_builder import AdvisoryBuilder
 
-
 @pytest.fixture
 def builder():
     """Create advisory builder"""
     return AdvisoryBuilder()
-
 
 @pytest.fixture
 def critical_alert():
@@ -31,7 +29,6 @@ def critical_alert():
         timestamp=datetime.utcnow()
     )
 
-
 @pytest.fixture
 def high_alert():
     """Create HIGH alert for testing"""
@@ -49,7 +46,6 @@ def high_alert():
         recommendation="URGENT: Flag transactions, monitor accounts, notify fraud team",
         timestamp=datetime.utcnow()
     )
-
 
 @pytest.fixture
 def medium_alert():
@@ -69,7 +65,6 @@ def medium_alert():
         timestamp=datetime.utcnow()
     )
 
-
 def test_build_advisory_critical(builder, critical_alert):
     """Test building advisory from CRITICAL alert"""
     advisory = builder.build_advisory(critical_alert)
@@ -81,7 +76,6 @@ def test_build_advisory_critical(builder, critical_alert):
     assert advisory.entity_count == 5
     assert len(advisory.recommended_actions) == 6  # CRITICAL has 6 actions
 
-
 def test_build_advisory_high(builder, high_alert):
     """Test building advisory from HIGH alert"""
     advisory = builder.build_advisory(high_alert)
@@ -90,7 +84,6 @@ def test_build_advisory_high(builder, high_alert):
     assert advisory.severity == "HIGH"
     assert len(advisory.recommended_actions) == 5  # HIGH has 5 actions
 
-
 def test_build_advisory_medium(builder, medium_alert):
     """Test building advisory from MEDIUM alert"""
     advisory = builder.build_advisory(medium_alert)
@@ -98,7 +91,6 @@ def test_build_advisory_medium(builder, medium_alert):
     assert advisory is not None
     assert advisory.severity == "MEDIUM"
     assert len(advisory.recommended_actions) == 4  # MEDIUM has 4 actions
-
 
 def test_advisory_id_format(builder, critical_alert):
     """Test advisory ID format"""

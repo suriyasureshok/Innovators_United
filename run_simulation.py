@@ -101,7 +101,10 @@ class SimulationController:
                             self.entity_a_stats["fraud_detected"] += 1
                             
                     except Exception as e:
-                        # Hub might not be running, continue anyway
+                        # Hub might not be running, log error
+                        if self.entity_a_stats["processed"] == 1:
+                            print(f"⚠️  Entity A: Cannot reach Hub - {e}")
+                            print(f"   Continuing without Hub submission...")
                         pass
                 
                 # Print status every 10 transactions
@@ -186,7 +189,10 @@ class SimulationController:
                             self.entity_b_stats["fraud_detected"] += 1
                             
                     except Exception as e:
-                        # Hub might not be running, continue anyway
+                        # Hub might not be running, log error
+                        if self.entity_b_stats["processed"] == 1:
+                            print(f"⚠️  Entity B: Cannot reach Hub - {e}")
+                            print(f"   Continuing without Hub submission...")
                         pass
                 
                 # Print status every 10 transactions
@@ -338,18 +344,24 @@ async def main():
     
     # Parse command line arguments
     import sys
+    import argparse
     
-    duration = 60  # Default 60 seconds
-    hub_url = "http://localhost:8000"
+    parser = argparse.ArgumentParser(description='Run SYNAPSE-FI fraud detection simulation')
+    parser.add_argument('--duration', type=int, default=60, 
+                       help='Simulation duration in seconds (default: 60)')
+    parser.add_argument('--hub-url', type=str, default='http://localhost:8000',
+                       help='BRIDGE Hub URL (default: http://localhost:8000)')
     
-    if len(sys.argv) > 1:
-        try:
-            duration = int(sys.argv[1])
-        except ValueError:
-            print(f"Invalid duration: {sys.argv[1]}, using default of 60 seconds")
-            
-    if len(sys.argv) > 2:
-        hub_url = sys.argv[2]
+    # Support both old positional args and new flag-based args for backward compatibility
+    if len(sys.argv) > 1 and not sys.argv[1].startswith('--'):
+        # Old style: python run_simulation.py 60
+        duration = int(sys.argv[1]) if len(sys.argv) > 1 else 60
+        hub_url = sys.argv[2] if len(sys.argv) > 2 else "http://localhost:8000"
+    else:
+        # New style: python run_simulation.py --duration 60 --hub-url http://localhost:8000
+        args = parser.parse_args()
+        duration = args.duration
+        hub_url = args.hub_url
         
     # Create and run simulation
     controller = SimulationController(hub_url=hub_url)

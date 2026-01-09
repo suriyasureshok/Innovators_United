@@ -66,8 +66,8 @@ class TransactionStreamGenerator:
     def _generate_transaction(self) -> Transaction:
         """Generate single transaction (normal or suspicious)"""
 
-        # ~80% normal, ~20% suspicious
-        is_suspicious = self.random.random() < 0.2
+        # ~70% normal, ~30% suspicious (better mix for demo)
+        is_suspicious = self.random.random() < 0.3
 
         if is_suspicious:
             return self._generate_suspicious_transaction()

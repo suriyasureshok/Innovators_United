@@ -1,0 +1,181 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 96%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 199 89% 48%;
+    --primary-foreground: 222 47% 6%;
+
+    --secondary: 222 30% 14%;
+    --secondary-foreground: 210 40% 90%;
+
+    --muted: 222 30% 12%;
+    --muted-foreground: 215 20% 55%;
+
+    --accent: 199 89% 48%;
+    --accent-foreground: 222 47% 6%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 6%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 222 47% 6%;
+
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 199 89% 48%;
+
+    --radius: 0.75rem;
+
+    /* Custom SYNAPSE-FI tokens */
+    --glass: 222 47% 10% / 0.6;
+    --glass-border: 222 30% 25% / 0.4;
+    --glow-primary: 199 89% 48% / 0.3;
+    --glow-danger: 0 72% 51% / 0.4;
+    --escalated: 0 72% 51%;
+    --elevated: 38 92% 50%;
+    --normal: 199 89% 48%;
+    --pattern-node: 199 89% 48%;
+    --pattern-edge: 199 60% 40%;
+
+    --sidebar-background: 222 47% 5%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 199 89% 48%;
+    --sidebar-primary-foreground: 222 47% 6%;
+    --sidebar-accent: 222 30% 12%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 222 30% 15%;
+    --sidebar-ring: 199 89% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/60 backdrop-blur-xl border border-border/40 rounded-xl;
+    box-shadow: 
+      0 4px 24px -4px hsl(var(--glow-primary)),
+      inset 0 1px 0 0 hsl(222 30% 30% / 0.1);
+  }
+
+  .glass-card-elevated {
+    @apply glass-card;
+    box-shadow: 
+      0 8px 32px -4px hsl(var(--glow-primary)),
+      inset 0 1px 0 0 hsl(222 30% 30% / 0.2);
+  }
+
+  .glass-card-danger {
+    @apply bg-card/60 backdrop-blur-xl border border-destructive/30 rounded-xl;
+    box-shadow: 
+      0 4px 24px -4px hsl(var(--glow-danger)),
+      inset 0 1px 0 0 hsl(0 72% 51% / 0.1);
+  }
+
+  .kpi-value {
+    @apply text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent;
+  }
+
+  .kpi-value-danger {
+    @apply text-4xl font-bold tracking-tight bg-gradient-to-r from-destructive to-destructive/70 bg-clip-text text-transparent;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground transition-all duration-200 hover:bg-secondary/50 hover:text-foreground;
+  }
+
+  .nav-item-active {
+    @apply nav-item bg-primary/10 text-primary border-l-2 border-primary;
+  }
+
+  .pulse-escalated {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .glow-text {
+    text-shadow: 0 0 20px hsl(var(--primary) / 0.5);
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-foreground tracking-tight;
+  }
+
+  .subsection-title {
+    @apply text-sm font-medium text-muted-foreground uppercase tracking-wider;
+  }
+
+  .badge-normal {
+    @apply px-2.5 py-1 rounded-full text-xs font-medium bg-primary/20 text-primary border border-primary/30;
+  }
+
+  .badge-elevated {
+    @apply px-2.5 py-1 rounded-full text-xs font-medium bg-warning/20 text-warning border border-warning/30;
+  }
+
+  .badge-escalated {
+    @apply px-2.5 py-1 rounded-full text-xs font-medium bg-destructive/20 text-destructive border border-destructive/30;
+  }
+
+  .explanation-step {
+    @apply relative pl-8 py-3 border-l-2 border-border;
+  }
+
+  .explanation-step::before {
+    content: '';
+    @apply absolute left-[-5px] top-4 w-2 h-2 rounded-full bg-primary;
+  }
+
+  .explanation-step-active::before {
+    @apply bg-primary;
+    box-shadow: 0 0 12px hsl(var(--primary));
+  }
+}
+
+@layer utilities {
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 8px hsl(var(--destructive) / 0.4);
+    }
+    50% {
+      box-shadow: 0 0 24px hsl(var(--destructive) / 0.8);
+    }
+  }
+
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+}

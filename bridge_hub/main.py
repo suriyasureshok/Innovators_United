@@ -455,6 +455,75 @@ async def get_graph_edges(api_key: str = Header(..., alias="x-api-key")):
     }
 
 
+@app.get("/graph")
+async def get_brg_graph(api_key: str = Header(..., alias="x-api-key")):
+    """
+    Get BRG graph data for visualization
+    Returns nodes (patterns and entities) and edges (observations)
+    """
+    verify_api_key(api_key)
+    
+    # Get all nodes with their data
+    nodes_list = []
+    entities_seen = set()
+    
+    for node, data in brg.graph.nodes(data=True):
+        # Pattern nodes
+        observations = data.get('observations', [])
+        if observations:
+            latest_obs = observations[-1]
+            nodes_list.append({
+                "id": node[:8],  # Use short fingerprint as ID
+                "label": node[:8],
+                "type": "pattern",
+                "severity": latest_obs.get('severity', 'MEDIUM'),
+                "confidence": int(data.get('effective_confidence', 0.5) * 100)
+            })
+            
+            # Track entities for this pattern
+            for obs in observations:
+                entity_id = obs.get('entity_id')
+                if entity_id:
+                    entities_seen.add(entity_id)
+    
+    # Add entity nodes
+    for entity_id in entities_seen:
+        # Count fingerprints from this entity
+        entity_count = sum(
+            1 for node, data in brg.graph.nodes(data=True)
+            for obs in data.get('observations', [])
+            if obs.get('entity_id') == entity_id
+        )
+        
+        nodes_list.append({
+            "id": entity_id,
+            "label": entity_id.upper().replace('_', ' '),
+            "type": "entity",
+            "risk_score": entity_count * 15,  # Simple heuristic
+            "confidence": min(entity_count * 10, 95)
+        })
+    
+    # Get edges (entity to pattern connections)
+    edges_list = []
+    for node, data in brg.graph.nodes(data=True):
+        pattern_id = node[:8]
+        observations = data.get('observations', [])
+        
+        for obs in observations:
+            entity_id = obs.get('entity_id')
+            if entity_id:
+                edges_list.append({
+                    "source": entity_id,
+                    "target": pattern_id,
+                    "weight": 1
+                })
+    
+    return {
+        "nodes": nodes_list,
+        "edges": edges_list
+    }
+
+
 @app.post("/admin/config/update")
 async def update_config(
     new_config: dict,
