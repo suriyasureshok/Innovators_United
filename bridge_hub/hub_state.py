@@ -58,8 +58,8 @@ class HubState:
         # Count active entities (unique entity_ids in recent observations)
         active_entities = len(self.brg.get_active_entities(minutes=60))
         
-        # Get temporal coverage
-        temporal_coverage = self._calculate_temporal_coverage()
+        # Get temporal coverage (convert to int)
+        temporal_coverage = int(self._calculate_temporal_coverage())
         
         stats = GraphStats(
             unique_patterns=unique_patterns,

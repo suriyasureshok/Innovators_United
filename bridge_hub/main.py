@@ -20,7 +20,9 @@ from .brg_graph import BehavioralRiskGraph
 from .temporal_correlator import TemporalCorrelator
 from .escalation_engine import EscalationEngine
 from .advisory_builder import AdvisoryBuilder
+from .decay_engine import DecayEngine
 from .hub_state import HubState
+from .metrics import MetricsTracker, MetricsSummary
 from .config import load_config, validate_config
 
 # Configure logging
@@ -35,7 +37,9 @@ brg: BehavioralRiskGraph = None
 correlator: TemporalCorrelator = None
 escalator: EscalationEngine = None
 advisor: AdvisoryBuilder = None
+decay_engine: DecayEngine = None
 hub_state: HubState = None
+metrics_tracker: MetricsTracker = None
 config: dict = None
 advisories: List[Advisory] = []
 
@@ -56,7 +60,7 @@ async def prune_graph_periodically():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown"""
-    global brg, correlator, escalator, advisor, hub_state, config, advisories
+    global brg, correlator, escalator, advisor, decay_engine, hub_state, metrics_tracker, config, advisories
     
     # Startup
     logger.info("🚀 Starting BRIDGE Hub...")
@@ -65,11 +69,19 @@ async def lifespan(app: FastAPI):
     config = load_config()
     validate_config(config)
     
+    # Initialize decay engine (used by correlator)
+    decay_engine = DecayEngine(config=config.get('decay_config', {}))
+    logger.info(f"✅ DecayEngine initialized with discrete time windows")
+    
+    # Initialize metrics tracker
+    metrics_tracker = MetricsTracker(window_size=3600)  # 1 hour rolling window
+    logger.info(f"✅ MetricsTracker initialized")
+    
     # Initialize components
     brg = BehavioralRiskGraph(
         max_age_seconds=config['max_graph_age_seconds']
     )
-    correlator = TemporalCorrelator(config)
+    correlator = TemporalCorrelator(config, decay_engine=decay_engine)
     escalator = EscalationEngine(config)
     advisor = AdvisoryBuilder()
     hub_state = HubState(brg, advisories)
@@ -83,6 +95,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"   Escalation: MEDIUM={config['medium_threshold']}, "
                 f"HIGH={config['high_threshold']}, "
                 f"CRITICAL={config['critical_threshold']}")
+    logger.info(f"   Pattern decay: ENABLED")
     
     yield
     
@@ -184,36 +197,68 @@ async def ingest_fingerprint(
     """
     verify_api_key(api_key)
     
+    # Start metrics tracking
+    ingest_start = datetime.utcnow()
+    
     logger.info(
         f"📥 Ingesting fingerprint from {fingerprint.entity_id}: "
         f"{fingerprint.fingerprint[:12]}... (severity={fingerprint.severity})"
     )
     
-    # Add to graph
+    # Detect correlation first to get decay information
+    correlation_start = datetime.utcnow()
+    correlation = correlator.detect_correlation(fingerprint.fingerprint, brg)
+    correlation_latency_ms = (datetime.utcnow() - correlation_start).total_seconds() * 1000
+    
+    # Record correlation metrics
+    metrics_tracker.record_correlation(correlation_latency_ms, detected=(correlation is not None))
+    
+    # Prepare decay fields for BRG storage
+    if correlation:
+        # Pattern has correlation - use decay fields from correlation
+        base_confidence = correlation.base_confidence
+        decay_score = correlation.decay_score
+        effective_confidence = correlation.effective_confidence
+        pattern_status = correlation.pattern_status
+    else:
+        # New or uncorrelated pattern - initialize with fresh state
+        base_confidence = 0.5  # Default for single observation
+        decay_score = 1.0
+        effective_confidence = 0.5
+        pattern_status = "ACTIVE"
+    
+    # Add to graph with decay information
     brg.add_pattern_observation(
         fingerprint=fingerprint.fingerprint,
         entity_id=fingerprint.entity_id,
         severity=fingerprint.severity,
-        timestamp=fingerprint.timestamp
+        timestamp=fingerprint.timestamp,
+        base_confidence=base_confidence,
+        decay_score=decay_score,
+        effective_confidence=effective_confidence,
+        pattern_status=pattern_status
     )
     
-    # Detect correlation
-    correlation = correlator.detect_correlation(fingerprint.fingerprint, brg)
-    
     if correlation:
-        logger.info(f"✅ Correlation detected: {correlation.entity_count} entities")
+        logger.info(
+            f"✅ Correlation detected: {correlation.entity_count} entities, "
+            f"eff_conf={correlation.effective_confidence:.3f}, "
+            f"status={correlation.pattern_status}"
+        )
         
         # Escalate to fraud intent
         alert = escalator.evaluate(correlation)
         
         if alert:
             logger.warning(f"🚨 Fraud intent escalated: {alert.severity}")
+            metrics_tracker.record_escalation()
             
             # Build advisory
             advisory = advisor.build_advisory(alert)
             
             # Store advisory
             advisories.append(advisory)
+            metrics_tracker.record_advisory(advisory.severity, advisory.fraud_score)
             
             # Trim advisory list if too large
             if len(advisories) > config['max_advisories']:
@@ -222,6 +267,10 @@ async def ingest_fingerprint(
             logger.info(f"📢 Advisory generated: {advisory.advisory_id}")
     else:
         logger.debug("No correlation detected for this fingerprint")
+    
+    # Record total ingestion latency
+    ingest_latency_ms = (datetime.utcnow() - ingest_start).total_seconds() * 1000
+    metrics_tracker.record_ingestion(fingerprint.entity_id, ingest_latency_ms)
     
     return {
         "status": "accepted",
@@ -328,6 +377,47 @@ async def get_entity_activity(
 # ============================================================================
 # ADMIN ENDPOINTS (for dashboard/monitoring)
 # ============================================================================
+
+@app.get("/metrics", response_model=MetricsSummary)
+async def get_metrics(api_key: str = Header(..., alias="x-api-key")):
+    """
+    Get Hub operational metrics
+    
+    Returns comprehensive metrics including:
+    - Throughput (fingerprints, correlations, alerts, advisories)
+    - Performance (latencies, p95 percentiles)
+    - Graph statistics (nodes, edges, pattern statuses)
+    - Entity participation
+    - Advisory effectiveness
+    
+    Args:
+        api_key: API key for authentication
+        
+    Returns:
+        MetricsSummary with all current metrics
+    """
+    verify_api_key(api_key)
+    
+    # Get graph stats
+    graph_stats = brg.get_stats()
+    
+    # Update pattern status counts from graph stats
+    status_counts = graph_stats.get('pattern_status', {})
+    metrics_tracker.update_pattern_status_counts(
+        active=status_counts.get('ACTIVE', 0),
+        cooling=status_counts.get('COOLING', 0),
+        dormant=status_counts.get('DORMANT', 0)
+    )
+    
+    # Get comprehensive metrics summary
+    summary = metrics_tracker.get_summary(graph_stats=graph_stats)
+    
+    logger.info(f"Metrics requested: {summary.fingerprints_ingested} fingerprints, "
+               f"{summary.correlations_detected} correlations, "
+               f"{summary.advisories_generated} advisories")
+    
+    return summary
+
 
 @app.get("/admin/graph/nodes")
 async def get_graph_nodes(api_key: str = Header(..., alias="x-api-key")):

@@ -49,13 +49,13 @@ class EscalationEngine:
     
     def evaluate(self, correlation: CorrelationResult) -> Optional[IntentAlert]:
         """
-        Evaluate correlation and escalate if thresholds met
+        Evaluate correlation and escalate if thresholds met (uses effective_confidence with decay)
         
         Args:
-            correlation: CorrelationResult from temporal correlator
+            correlation: CorrelationResult from temporal correlator (includes decay fields)
             
         Returns:
-            IntentAlert if escalation warranted, None otherwise
+            IntentAlert with decay information if escalation warranted, None otherwise
         """
         # Determine severity based on entity count
         severity = self._calculate_severity(correlation.entity_count)
@@ -67,13 +67,13 @@ class EscalationEngine:
             )
             return None
         
-        # Calculate fraud score (0-100)
+        # Calculate fraud score using effective_confidence (decayed)
         fraud_score = self._calculate_fraud_score(correlation)
         
-        # Build description
+        # Build description with decay awareness
         description = self._build_description(correlation, severity)
         
-        # Create intent alert
+        # Create intent alert with decay fields
         alert = IntentAlert(
             alert_id=self._generate_alert_id(correlation),
             intent_type="COORDINATED_FRAUD",
@@ -86,12 +86,21 @@ class EscalationEngine:
             rationale=self._build_rationale(correlation, severity, fraud_score),
             recommendation=self._get_recommendation(severity),
             fraud_score=fraud_score,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
+            # Decay-related fields
+            base_confidence=correlation.base_confidence,
+            decay_score=correlation.decay_score,
+            effective_confidence=correlation.effective_confidence,
+            last_seen_timestamp=correlation.last_seen_timestamp,
+            pattern_status=correlation.pattern_status,
+            time_since_last_seen_seconds=(datetime.utcnow() - correlation.last_seen_timestamp).total_seconds(),
+            decay_explanation=f"Pattern lifecycle: {correlation.pattern_status}, decay={correlation.decay_score:.2f}"
         )
         
         logger.warning(
             f"🚨 FRAUD INTENT ESCALATED: {severity} - {correlation.fingerprint} "
-            f"(score={fraud_score}, entities={correlation.entity_count})"
+            f"(score={fraud_score}, entities={correlation.entity_count}, "
+            f"eff_conf={correlation.effective_confidence:.3f}, status={correlation.pattern_status})"
         )
         
         return alert
@@ -117,28 +126,27 @@ class EscalationEngine:
     
     def _calculate_fraud_score(self, correlation: CorrelationResult) -> int:
         """
-        Calculate fraud score (0-100) based on correlation metrics
+        Calculate fraud score (0-100) using effective_confidence with decay
         
         Scoring logic:
-        - Base score: entity_count * 20 (capped at 80)
-        - Bonus: +10 for HIGH confidence
-        - Bonus: +5 for MEDIUM confidence
-        - Penalty: -10 if time_span > 10 minutes
+        - Base score: entity_count * 20 (capped at 60)
+        - Effective confidence bonus: effective_confidence * 30 (0-30 points)
+        - Time span penalty: -10 if time_span > 10 minutes
+        
+        NOTE: Uses effective_confidence (decayed) instead of base_confidence
+        to ensure stale patterns have lower impact on fraud scores.
         
         Args:
-            correlation: CorrelationResult to score
+            correlation: CorrelationResult with decay fields
             
         Returns:
             Fraud score (0-100)
         """
-        # Base score from entity count
-        score = min(correlation.entity_count * 20, 80)
+        # Base score from entity count (capped at 60 to leave room for confidence)
+        score = min(correlation.entity_count * 20, 60)
         
-        # Confidence bonus
-        if correlation.confidence == "HIGH":
-            score += 10
-        elif correlation.confidence == "MEDIUM":
-            score += 5
+        # Effective confidence bonus (0-30 points based on decayed confidence)
+        score += int(correlation.effective_confidence * 30)
         
         # Time span penalty (quick succession = higher risk)
         if correlation.time_span_seconds > 600:  # 10 minutes

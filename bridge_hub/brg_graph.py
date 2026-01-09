@@ -1,6 +1,6 @@
 """
 Behavioral Risk Graph (BRG) Implementation
-In-memory graph structure for pattern correlation
+In-memory graph structure for pattern correlation with decay tracking
 """
 import networkx as nx
 from typing import List, Dict, Optional, Set
@@ -12,12 +12,17 @@ logger = logging.getLogger(__name__)
 
 class BehavioralRiskGraph:
     """
-    In-memory graph for behavioral pattern correlation
+    In-memory graph for behavioral pattern correlation with decay support
     
     PRIVACY GUARANTEE:
     - Stores only fingerprints (not transactions)
     - No PII whatsoever
     - Relationships only, no raw data
+    
+    DECAY TRACKING:
+    - Stores base_confidence, decay_score, effective_confidence for each pattern
+    - Tracks last_seen_timestamp for decay calculations
+    - Maintains pattern_status (ACTIVE, COOLING, DORMANT)
     """
     
     def __init__(self, max_age_seconds: int = 300):
@@ -39,26 +44,46 @@ class BehavioralRiskGraph:
         fingerprint: str,
         entity_id: str,
         severity: str,
-        timestamp: datetime
+        timestamp: datetime,
+        base_confidence: float = 0.0,
+        decay_score: float = 1.0,
+        effective_confidence: float = 0.0,
+        pattern_status: str = "ACTIVE"
     ) -> None:
         """
-        Add new pattern observation to graph
+        Add new pattern observation to graph with decay tracking
         
         Args:
             fingerprint: Behavioral pattern fingerprint
             entity_id: Observing entity
             severity: Risk severity level
             timestamp: Observation time
+            base_confidence: Base confidence before decay (0.0-1.0)
+            decay_score: Time-based decay factor (0.0-1.0)
+            effective_confidence: Decayed confidence (0.0-1.0)
+            pattern_status: Pattern lifecycle status (ACTIVE, COOLING, DORMANT)
         """
-        # Add or update pattern node
+        # Add or update pattern node with decay fields
         if not self.graph.has_node(fingerprint):
             self.graph.add_node(
                 fingerprint,
                 node_type="pattern",
                 first_seen=timestamp,
-                observation_count=0
+                observation_count=0,
+                base_confidence=base_confidence,
+                decay_score=decay_score,
+                effective_confidence=effective_confidence,
+                last_seen_timestamp=timestamp,
+                pattern_status=pattern_status
             )
-            logger.debug(f"Created new pattern node: {fingerprint}")
+            logger.debug(f"Created new pattern node: {fingerprint} [status={pattern_status}]")
+        else:
+            # Update decay fields for existing pattern
+            self.graph.nodes[fingerprint]['base_confidence'] = base_confidence
+            self.graph.nodes[fingerprint]['decay_score'] = decay_score
+            self.graph.nodes[fingerprint]['effective_confidence'] = effective_confidence
+            self.graph.nodes[fingerprint]['last_seen_timestamp'] = timestamp
+            self.graph.nodes[fingerprint]['pattern_status'] = pattern_status
         
         # Update observation count
         self.graph.nodes[fingerprint]['observation_count'] += 1
@@ -81,7 +106,7 @@ class BehavioralRiskGraph:
         self._observation_count += 1
         logger.info(
             f"Added observation: {entity_id} -> {fingerprint} "
-            f"[severity={severity}, total_observations={self._observation_count}]"
+            f"[severity={severity}, status={pattern_status}, eff_conf={effective_confidence:.3f}, total_obs={self._observation_count}]"
         )
     
     def get_recent_observations(
@@ -219,7 +244,7 @@ class BehavioralRiskGraph:
         return len(edges_to_remove)
     
     def get_stats(self) -> Dict:
-        """Get graph statistics"""
+        """Get graph statistics with decay information"""
         # Count unique patterns (nodes with node_type == 'pattern')
         unique_patterns = len([
             n for n, d in self.graph.nodes(data=True) 
@@ -252,13 +277,29 @@ class BehavioralRiskGraph:
         else:
             temporal_coverage_seconds = 0
         
+        # Calculate decay statistics
+        pattern_statuses = {"ACTIVE": 0, "COOLING": 0, "DORMANT": 0}
+        total_effective_confidence = 0.0
+        pattern_count = 0
+        
+        for node, data in self.graph.nodes(data=True):
+            if data.get('node_type') == 'pattern':
+                status = data.get('pattern_status', 'ACTIVE')
+                pattern_statuses[status] = pattern_statuses.get(status, 0) + 1
+                total_effective_confidence += data.get('effective_confidence', 0.0)
+                pattern_count += 1
+        
+        avg_effective_confidence = (total_effective_confidence / pattern_count) if pattern_count > 0 else 0.0
+        
         return {
             'unique_patterns': unique_patterns,
             'total_observations': self._observation_count,
             'active_entities': active_entities,
             'unique_entities': unique_entities,
             'memory_size_bytes': memory_size_bytes,
-            'temporal_coverage_seconds': temporal_coverage_seconds
+            'temporal_coverage_seconds': temporal_coverage_seconds,
+            'pattern_statuses': pattern_statuses,
+            'avg_effective_confidence': round(avg_effective_confidence, 3)
         }
     
     def get_pattern_details(self, fingerprint: str) -> Optional[Dict]:

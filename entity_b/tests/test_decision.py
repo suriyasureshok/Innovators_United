@@ -1,8 +1,8 @@
 """Tests for Entity A decision engine"""
 import pytest
 from datetime import datetime
-from entity_a.models import Transaction, RiskScore, BehaviorPattern, DecisionAction
-from entity_a.decision import DecisionEngine, ExplanationGenerator
+from entity_b.models import Transaction, RiskScore, BehaviorPattern, DecisionAction
+from entity_b.decision import DecisionEngine, ExplanationGenerator
 from bridge_hub.models import Advisory
 
 

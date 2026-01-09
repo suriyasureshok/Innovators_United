@@ -1,43 +1,52 @@
 """
 Temporal Correlation Engine
-Detects coordinated patterns across entities using time-based analysis
+Detects coordinated patterns across entities using time-based analysis with decay support
 """
 from typing import Optional
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 
 from .models import CorrelationResult
 from .brg_graph import BehavioralRiskGraph
+from .decay_engine import DecayEngine
 
 logger = logging.getLogger(__name__)
 
 
 class TemporalCorrelator:
     """
-    Detect temporal correlations in behavioral patterns
+    Detect temporal correlations in behavioral patterns with decay tracking
     
     KEY INSIGHT:
     A pattern appearing once is noise.
     The same pattern appearing across multiple entities
     in a short time window is intelligence.
+    
+    DECAY INTEGRATION:
+    - Calculates decay for each correlated pattern
+    - Provides effective_confidence for downstream decisions
+    - Tracks pattern lifecycle (ACTIVE, COOLING, DORMANT)
     """
     
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, decay_engine: Optional[DecayEngine] = None):
         """
-        Initialize correlator
+        Initialize correlator with decay support
         
         Args:
             config: Configuration dictionary with:
                 - entity_threshold: Minimum entities for correlation (default 2)
                 - time_window_seconds: Time window for correlation (default 300)
+            decay_engine: Optional DecayEngine instance for pattern decay calculations
         """
         self.entity_threshold = config.get('entity_threshold', 2)
         self.time_window_seconds = config.get('time_window_seconds', 300)
+        self.decay_engine = decay_engine or DecayEngine()
         
         logger.info(
             f"Initialized TemporalCorrelator: "
             f"entity_threshold={self.entity_threshold}, "
-            f"time_window={self.time_window_seconds}s"
+            f"time_window={self.time_window_seconds}s, "
+            f"decay_enabled={decay_engine is not None}"
         )
     
     def detect_correlation(
@@ -46,14 +55,14 @@ class TemporalCorrelator:
         brg: BehavioralRiskGraph
     ) -> Optional[CorrelationResult]:
         """
-        Detect if pattern shows cross-entity correlation
+        Detect if pattern shows cross-entity correlation with decay calculation
         
         Args:
             fingerprint: Pattern fingerprint to analyze
             brg: Behavioral Risk Graph instance
             
         Returns:
-            CorrelationResult if correlation detected, None otherwise
+            CorrelationResult with decay information if correlation detected, None otherwise
         """
         # Get recent observations from BRG
         time_window = timedelta(seconds=self.time_window_seconds)
@@ -83,21 +92,42 @@ class TemporalCorrelator:
         else:
             time_span = 0.0
         
-        # Determine confidence level
-        confidence = self._calculate_confidence(entity_count, time_span)
+        # Determine base confidence level
+        confidence_str = self._calculate_confidence(entity_count, time_span)
+        
+        # Convert string confidence to numeric base_confidence
+        confidence_map = {"LOW": 0.5, "MEDIUM": 0.75, "HIGH": 0.9}
+        base_confidence = confidence_map.get(confidence_str, 0.5)
+        
+        # Get last seen timestamp
+        last_seen = observations[-1]['timestamp'] if observations else datetime.utcnow()
+        
+        # Apply decay logic
+        decay_result = self.decay_engine.apply_decay(
+            pattern_id=fingerprint,
+            base_confidence=base_confidence,
+            last_seen_timestamp=last_seen,
+            current_timestamp=datetime.utcnow()
+        )
         
         logger.info(
             f"✅ Correlation detected for {fingerprint}: "
             f"{entity_count} entities, {time_span:.1f}s span, "
-            f"confidence={confidence}"
+            f"confidence={confidence_str}, base_conf={base_confidence:.3f}, "
+            f"eff_conf={decay_result['effective_confidence']:.3f}, status={decay_result['status']}"
         )
         
         return CorrelationResult(
             fingerprint=fingerprint,
             entity_count=entity_count,
             time_span_seconds=time_span,
-            confidence=confidence,
-            observations=observations
+            confidence=confidence_str,
+            observations=observations,
+            base_confidence=base_confidence,
+            decay_score=decay_result['decay_score'],
+            effective_confidence=decay_result['effective_confidence'],
+            last_seen_timestamp=last_seen,
+            pattern_status=decay_result['status']
         )
     
     def _calculate_confidence(self, entity_count: int, time_span: float) -> str:

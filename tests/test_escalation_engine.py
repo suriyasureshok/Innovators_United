@@ -96,21 +96,26 @@ def test_evaluate_below_threshold(engine, sample_observations):
 
 
 def test_fraud_score_calculation(engine, sample_observations):
-    """Test fraud score calculation"""
-    # High entity count + HIGH confidence
+    """Test fraud score calculation with decay fields"""
+    # High entity count + HIGH confidence (effective_confidence = 0.9 for HIGH, fresh pattern)
     correlation = CorrelationResult(
         fingerprint="test_pattern",
         entity_count=4,
         time_span_seconds=60.0,
         confidence="HIGH",
-        observations=sample_observations * 4
+        observations=sample_observations * 4,
+        base_confidence=0.9,
+        decay_score=1.0,
+        effective_confidence=0.9,  # Fresh pattern, no decay
+        last_seen_timestamp=datetime.utcnow(),
+        pattern_status="ACTIVE"
     )
     
     alert = engine.evaluate(correlation)
     
     assert alert is not None
-    # Score = (4 * 20) + 10 (HIGH confidence) = 90
-    assert alert.fraud_score == 90
+    # Score = min(4 * 20, 60) + int(0.9 * 30) = 60 + 27 = 87
+    assert alert.fraud_score == 87
 
 
 def test_fraud_score_time_penalty(engine, sample_observations):
