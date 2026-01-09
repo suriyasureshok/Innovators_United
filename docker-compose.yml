@@ -1,0 +1,126 @@
+# Docker Compose Configuration for SYNAPSE-FI
+# Run entire stack with: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # ENTITY A SERVICE
+  # ==========================================================================
+  entity_a:
+    build:
+      context: ./entity_a
+      dockerfile: Dockerfile
+    container_name: synapse_entity_a
+    ports:
+      - "8001:8001"
+    environment:
+      - ENTITY_ID=entity_a
+      - ENTITY_NAME=Bank A
+      - PORT=8001
+      - HUB_URL=http://bridge_hub:8000
+      - FINGERPRINT_SALT=${ENTITY_A_FINGERPRINT_SALT}
+      - TXN_INTERVAL=2.0
+      - LOG_LEVEL=INFO
+    networks:
+      - synapse_network
+    depends_on:
+      - bridge_hub
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # ENTITY B SERVICE
+  # ==========================================================================
+  entity_b:
+    build:
+      context: ./entity_b
+      dockerfile: Dockerfile
+    container_name: synapse_entity_b
+    ports:
+      - "8002:8002"
+    environment:
+      - ENTITY_ID=entity_b
+      - ENTITY_NAME=Bank B
+      - PORT=8002
+      - HUB_URL=http://bridge_hub:8000
+      - FINGERPRINT_SALT=${ENTITY_B_FINGERPRINT_SALT}
+      - TXN_INTERVAL=2.0
+      - LOG_LEVEL=INFO
+    networks:
+      - synapse_network
+    depends_on:
+      - bridge_hub
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # BRIDGE HUB SERVICE
+  # ==========================================================================
+  bridge_hub:
+    build:
+      context: ./bridge_hub
+      dockerfile: Dockerfile
+    container_name: synapse_bridge_hub
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - TIME_WINDOW_SECONDS=300
+      - ENTITY_THRESHOLD=2
+      - ESCALATION_THRESHOLD=70
+      - LOG_LEVEL=INFO
+    networks:
+      - synapse_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # DASHBOARD SERVICE
+  # ==========================================================================
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: synapse_dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - HUB_URL=http://bridge_hub:8000
+      - ENTITY_A_URL=http://entity_a:8001
+      - ENTITY_B_URL=http://entity_b:8002
+    networks:
+      - synapse_network
+    depends_on:
+      - bridge_hub
+      - entity_a
+      - entity_b
+    restart: unless-stopped
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  synapse_network:
+    driver: bridge
+    name: synapse_network
+
+# =============================================================================
+# VOLUMES (if needed for persistence)
+# =============================================================================
+volumes:
+  hub_data:
+    name: synapse_hub_data
