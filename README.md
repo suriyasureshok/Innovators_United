@@ -8,7 +8,7 @@
 
 > **Detect coordinated fraud across financial institutions without sharing sensitive data**
 
-Powered by **BRIDGE** (Behavioral Risk Intent Discovery & Governance Engine)
+Powered by **BRIDGE** (Behavioral Risk Intent Decision Graph Engine)
 
 ---
 
