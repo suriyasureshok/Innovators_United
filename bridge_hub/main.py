@@ -409,7 +409,7 @@ if __name__ == "__main__":
     logger.info(f"Starting BRIDGE Hub on {config['host']}:{config['port']}")
     
     uvicorn.run(
-        "main:app",
+        "bridge_hub.main:app",
         host=config['host'],
         port=config['port'],
         reload=True,
