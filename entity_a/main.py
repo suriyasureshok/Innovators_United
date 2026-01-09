@@ -8,6 +8,10 @@ from datetime import datetime
 
 from entity_a.stream import TransactionStreamGenerator
 from entity_a.models import Transaction
+from entity_a.risk_engine import FeatureExtractor, RiskScorer
+from entity_a.pattern_classifier import PatternClassifier
+from entity_a.fingerprint import FingerprintGenerator
+from entity_a.hub_client import BridgeHubClient
 
 
 class EntityAService:
@@ -26,13 +30,34 @@ class EntityAService:
         """
         self.entity_id = entity_id
 
+        # Initialize processing components
+        self.feature_extractor = FeatureExtractor()
+        self.risk_scorer = RiskScorer()
+        self.pattern_classifier = PatternClassifier()
+        self.fingerprint_generator = FingerprintGenerator(entity_id=entity_id)
+        
+        # Hub client
+        self.hub_client = BridgeHubClient(
+            hub_url="http://localhost:8001",
+            api_key="dev-key-change-in-production",
+            entity_id=entity_id
+        )
+
         # Metrics
         self.transactions_processed = 0
+        self.fingerprints_sent = 0
         self.start_time = None
 
     async def initialize(self):
         """Initialize service (async setup)"""
         self.start_time = time.time()
+        
+        # Check hub connectivity
+        connected = await self.hub_client.check_health()
+        if connected:
+            print("✅ Connected to BRIDGE Hub")
+        else:
+            print("⚠️  Hub not available - will retry on fingerprint send")
 
     async def process_transaction(self, transaction: Transaction) -> None:
         """
@@ -42,8 +67,46 @@ class EntityAService:
             transaction: Transaction to process
         """
         try:
-            # Basic processing placeholder
             self.transactions_processed += 1
+            
+            # Extract features
+            features = self.feature_extractor.extract_features(transaction)
+            
+            # Calculate risk score
+            risk_score = self.risk_scorer.calculate_risk_score(features)
+            
+            # Determine severity based on score
+            if risk_score.score >= 80:
+                severity = "CRITICAL"
+            elif risk_score.score >= 60:
+                severity = "HIGH"
+            elif risk_score.score >= 40:
+                severity = "MEDIUM"
+            else:
+                severity = "LOW"
+            
+            # Classify pattern
+            pattern = self.pattern_classifier.classify(risk_score)
+            
+            # Generate fingerprint
+            fingerprint = self.fingerprint_generator.generate_fingerprint(
+                pattern=pattern,
+                severity=severity,
+                timestamp=transaction.timestamp
+            )
+            
+            # Send to hub
+            success = await self.hub_client.send_fingerprint(
+                fingerprint=fingerprint,
+                severity=severity,
+                timestamp=transaction.timestamp.isoformat()
+            )
+            
+            if success:
+                self.fingerprints_sent += 1
+                print(f"Entity A fingerprint emitted: {fingerprint} (pattern: {pattern.value}, severity: {severity})")
+            else:
+                print(f"Failed to send fingerprint for transaction {transaction.transaction_id}")
 
         except Exception as e:
             print(f"Error processing transaction {transaction.transaction_id}: {e}")
@@ -56,6 +119,7 @@ class EntityAService:
         stats = {
             "entity_id": self.entity_id,
             "transactions_processed": self.transactions_processed,
+            "fingerprints_sent": self.fingerprints_sent,
             "elapsed_time_seconds": elapsed_time,
             "transactions_per_second": tps
         }
