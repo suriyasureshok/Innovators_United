@@ -2,8 +2,8 @@
 Entity A Data Models
 Privacy-preserving transaction and risk models
 """
-from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 from enum import Enum
 
@@ -22,6 +22,13 @@ class Transaction(BaseModel):
     ip_address: str = Field(..., description="Source IP - PRIVATE")
     location: str = Field(..., description="City, State - PRIVATE")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Transaction timestamp")
+    
+    @field_validator('amount')
+    @classmethod
+    def validate_amount(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError('amount must be >= 0')
+        return v
     
     class Config:
         json_schema_extra = {
@@ -44,7 +51,7 @@ class RiskScore(BaseModel):
     """Risk scoring result with behavioral signals"""
     score: float = Field(..., ge=0, le=100, description="Risk score 0-100")
     signals: List[str] = Field(default_factory=list, description="Triggered risk signals")
-    features: Dict = Field(default_factory=dict, description="Extracted features")
+    features: Dict[str, Any] = Field(default_factory=dict, description="Extracted features")
     pattern: Optional[str] = Field(None, description="Detected behavior pattern")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     
@@ -63,7 +70,7 @@ class RiskScore(BaseModel):
 class DecisionAction(str, Enum):
     """Transaction decision actions"""
     ALLOW = "allow"
-    STEP_UP = "step_up"  # Request additional authentication
+    STEP_UP = "step_up"
     BLOCK = "block"
 
 
@@ -87,7 +94,8 @@ class Decision(BaseModel):
                 "adjusted_score": 97.5,
                 "adjustment_factors": ["BRIDGE advisory: HIGH confidence"],
                 "advisory_applied": True,
-                "timestamp": "2026-01-09T14:30:00Z"
+                "timestamp": "2026-01-09T14:30:00Z",
+                "explanation": "Transaction blocked due to high risk score and BRIDGE advisory"
             }
         }
 
