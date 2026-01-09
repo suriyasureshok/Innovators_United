@@ -2,13 +2,13 @@
 BRIDGE Hub Main Application
 Central orchestration service for SYNAPSE-FI collective fraud intelligence
 """
-from fastapi import FastAPI, HTTPException, Header, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Header, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
-from datetime import datetime, timedelta
 import logging
 import asyncio
 from contextlib import asynccontextmanager
+import json
 
 from .models import (
     RiskFingerprint,
@@ -44,6 +44,36 @@ config: dict = None
 advisories: List[Advisory] = []
 
 
+class ConnectionManager:
+    """Manage WebSocket connections for real-time fingerprint streaming"""
+    
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+    
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+    
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+    
+    async def broadcast_fingerprint(self, fingerprint_data: dict):
+        """Broadcast fingerprint to all connected clients"""
+        if self.active_connections:
+            logger.info(f"📡 Broadcasting fingerprint to {len(self.active_connections)} client(s): {fingerprint_data}")
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(fingerprint_data)
+            except Exception as e:
+                logger.error(f"Failed to send to client: {e}")
+                # Remove broken connections
+                self.active_connections.remove(connection)
+
+
+# Global connection manager
+manager = ConnectionManager()
+
+
 # Background task for graph pruning
 async def prune_graph_periodically():
     """Background task to periodically prune expired graph edges"""
@@ -65,6 +95,7 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting BRIDGE Hub...")
     
+<<<<<<< HEAD
     # Load and validate configuration
     config = load_config()
     validate_config(config)
@@ -98,6 +129,37 @@ async def lifespan(app: FastAPI):
     logger.info(f"   Pattern decay: ENABLED")
     
     yield
+=======
+    try:
+        # Load and validate configuration
+        config = load_config()
+        validate_config(config)
+        
+        # Initialize components
+        brg = BehavioralRiskGraph(
+            max_age_seconds=config['max_graph_age_seconds']
+        )
+        correlator = TemporalCorrelator(config)
+        escalator = EscalationEngine(config)
+        advisor = AdvisoryBuilder()
+        hub_state = HubState(brg, advisories)
+        
+        # Start background tasks
+        # asyncio.create_task(prune_graph_periodically())
+        
+        logger.info("✅ BRIDGE Hub initialized successfully")
+        logger.info(f"   Entity threshold: {config['entity_threshold']}")
+        logger.info(f"   Time window: {config['time_window_seconds']}s")
+        logger.info(f"   Escalation: MEDIUM={config['medium_threshold']}, "
+                    f"HIGH={config['high_threshold']}, "
+                    f"CRITICAL={config['critical_threshold']}")
+        
+        yield
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to start BRIDGE Hub: {e}")
+        raise
+>>>>>>> 1a6d17f9aa0f61a18b8fc3da56965e00e5b43dc1
     
     # Shutdown
     logger.info("🛑 Shutting down BRIDGE Hub...")
@@ -268,9 +330,20 @@ async def ingest_fingerprint(
     else:
         logger.debug("No correlation detected for this fingerprint")
     
+<<<<<<< HEAD
     # Record total ingestion latency
     ingest_latency_ms = (datetime.utcnow() - ingest_start).total_seconds() * 1000
     metrics_tracker.record_ingestion(fingerprint.entity_id, ingest_latency_ms)
+=======
+    # Broadcast fingerprint to connected clients
+    fingerprint_data = {
+        "entity": fingerprint.entity_id,
+        "fingerprint": fingerprint.fingerprint,
+        "type": "fraud" if fingerprint.severity in ["HIGH", "CRITICAL"] else "legit",
+        "time": fingerprint.timestamp
+    }
+    await manager.broadcast_fingerprint(fingerprint_data)
+>>>>>>> 1a6d17f9aa0f61a18b8fc3da56965e00e5b43dc1
     
     return {
         "status": "accepted",
@@ -281,8 +354,34 @@ async def ingest_fingerprint(
     }
 
 
-@app.get("/advisories", response_model=List[Advisory])
-async def get_advisories(
+@app.websocket("/ws/fingerprints")
+async def websocket_fingerprints(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time fingerprint streaming
+
+    Frontend connects here to receive live fingerprint updates
+    """
+    try:
+        await manager.connect(websocket)
+        logger.info(f"🖥️  Frontend client connected to WebSocket. Total clients: {len(manager.active_connections)}")
+        
+        # Keep connection alive
+        while True:
+            try:
+                # Wait for any client messages (optional)
+                await websocket.receive_text()
+            except Exception:
+                # Client disconnected or error
+                break
+                
+    except Exception as e:
+        logger.error(f"WebSocket connection error: {e}")
+    finally:
+        try:
+            manager.disconnect(websocket)
+            logger.info(f"🖥️  Frontend client disconnected. Total clients: {len(manager.active_connections)}")
+        except:
+            pass
     limit: int = 10,
     severity: Optional[str] = None,
     api_key: str = Header(..., alias="x-api-key")
