@@ -67,6 +67,154 @@ React + TypeScript real-time monitoring, pattern analysis, BRG visualization
 
 ---
 
+## 🧠 BRIDGE Hub - The Core Intelligence Engine
+
+**BRIDGE** (Behavioral Risk Intent Decision Graph Engine) is the heart of SYNAPSE-FI, enabling privacy-preserving collective fraud intelligence.
+
+### How BRIDGE Works
+
+**1. Behavioral Risk Graph (BRG)**
+- In-memory graph database storing pattern relationships
+- Nodes: Entities and behavioral fingerprints
+- Edges: Temporal observations (who saw what, when)
+- Zero knowledge of actual transactions
+
+**2. Temporal Correlator**
+```python
+# Detects patterns appearing across multiple entities
+def detect_correlation(fingerprint, time_window=300s):
+    observations = graph.get_recent_observations(fingerprint)
+    unique_entities = count_unique_entities(observations)
+    return unique_entities >= ENTITY_THRESHOLD  # Default: 2
+```
+
+**Key Intelligence:**
+- Pattern seen once = noise
+- Same pattern at 2+ entities within 5 minutes = coordinated attack
+- Time transforms individual observations into collective intelligence
+
+**3. Escalation Engine**
+```python
+# Auto-escalates severity based on entity participation
+if entities >= 2 and severity in ["HIGH", "CRITICAL"]:
+    escalate_to_advisory()
+    confidence = "HIGH"
+```
+
+**Escalation Logic:**
+- **MEDIUM** → Single entity observation
+- **HIGH** → 2 entities within time window
+- **CRITICAL** → 3+ entities or repeated pattern
+
+**4. Decay Engine**
+```python
+# Confidence decreases without reinforcement
+confidence *= exp(-time_elapsed / DECAY_CONSTANT)
+if confidence < THRESHOLD:
+    pattern_status = "DORMANT"
+```
+
+**Why Decay Matters:**
+- Recent patterns weighted higher
+- Stale patterns fade naturally
+- Prevents false positives from old data
+- Adapts to evolving fraud tactics
+
+**5. Advisory Builder**
+```json
+{
+  "advisory_id": "adv_001",
+  "fingerprint": "fp_a3d7e9f2",
+  "confidence": "HIGH",
+  "entities_affected": 2,
+  "first_seen": "2026-01-10T10:30:00Z",
+  "last_seen": "2026-01-10T10:33:00Z",
+  "recommendation": "ESCALATE_RISK",
+  "rationale": "Pattern seen across 2 entities in 300s window"
+}
+```
+
+**Advisory Components:**
+- **Confidence Score**: Based on entity count & recency
+- **Rationale**: Human-readable explanation
+- **Recommendation**: Actionable guidance (not commands)
+- **No PII**: Only abstract pattern references
+
+### BRIDGE Intelligence Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Step 1: Fingerprint Arrives                                 │
+│ Entity A sends: {fp_a3d7e9f2, HIGH, timestamp}             │
+└────────────────────┬────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Step 2: Graph Update                                        │
+│ BRG adds: Entity_A --OBSERVED--> fp_a3d7e9f2              │
+│ Timestamp: 10:30:00                                        │
+└────────────────────┬────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Step 3: Temporal Correlation Check                          │
+│ Query: "Who else saw fp_a3d7e9f2 in last 5 minutes?"      │
+│ Result: Entity B (10:28:00) - 2 entities detected!        │
+└────────────────────┬────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Step 4: Escalation Decision                                 │
+│ IF entities ≥ 2 AND severity = HIGH                        │
+│ THEN: Generate advisory with HIGH confidence               │
+└────────────────────┬────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Step 5: Advisory Distribution                               │
+│ Broadcast to ALL entities:                                  │
+│ "Pattern fp_a3d7e9f2 is coordinated attack"               │
+│ Entities adjust local risk scores accordingly              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Why BRIDGE is Revolutionary
+
+**Traditional Approach:**
+```
+Bank A: $4,500 suspicious → Below $5K threshold → ALLOW ❌
+Bank B: $3,800 suspicious → Below threshold → ALLOW ❌
+Bank C: $4,200 suspicious → Below threshold → ALLOW ❌
+Total Loss: $12,500
+```
+
+**With BRIDGE:**
+```
+Bank A: $4,500 suspicious → fp_a3d7e9f2 → Send to BRIDGE
+Bank B: $3,800 suspicious → fp_a3d7e9f2 → Send to BRIDGE
+        ↓
+BRIDGE: "2 entities, same pattern, 3 min apart" → ADVISORY
+        ↓
+Bank A: Risk 87 → 95 (advisory boost) → BLOCK ✅
+Bank B: Risk 72 → 89 (advisory boost) → STEP-UP AUTH ✅
+Bank C: Receives preventative advisory → MONITOR ✅
+Total Loss Prevented: $12,500
+```
+
+### Privacy Guarantee
+
+BRIDGE never knows:
+- ❌ Customer names or IDs
+- ❌ Transaction amounts
+- ❌ Account numbers
+- ❌ Merchant details
+- ❌ Any reversible data
+
+BRIDGE only knows:
+- ✅ Entity A observed pattern X at time T
+- ✅ Entity B observed pattern X at time T+180s
+- ✅ Correlation exists → Issue advisory
+
+**Even if BRIDGE is compromised, zero transaction data exists to steal.**
+
+---
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -91,12 +239,6 @@ cd ../..
 
 ### Run
 
-**Option 1: PowerShell Script**
-```powershell
-.\start-full-system.ps1
-```
-
-**Option 2: Manual**
 ```bash
 # Terminal 1: BRIDGE Hub
 python -m bridge_hub.main
@@ -148,7 +290,6 @@ pytest tests/ -v              # All 37 tests
 pytest tests/test_temporal_correlator.py
 pytest tests/integration/test_e2e_flow.py
 ```
-✅ **37/37 passing**
 
 ---
 
@@ -156,18 +297,58 @@ pytest tests/integration/test_e2e_flow.py
 
 ```
 Synapse_FI/
-├── bridge_hub/              # BRIDGE Hub (FastAPI)
-│   ├── temporal_correlator.py
-│   ├── escalation_engine.py
-│   ├── decay_engine.py
-│   ├── advisory_builder.py
-│   └── brg_graph.py
-├── entity_a/                # Simulated Bank A
-├── entity_b/                # Simulated Bank B  
+├── bridge_hub/              # BRIDGE Hub - Core Intelligence Engine
+│   ├── main.py             # FastAPI server
+│   ├── brg_graph.py        # Behavioral Risk Graph (in-memory)
+│   ├── temporal_correlator.py  # Cross-entity pattern detection
+│   ├── escalation_engine.py    # Severity escalation logic
+│   ├── decay_engine.py         # Time-based confidence decay
+│   ├── advisory_builder.py     # Advisory message construction
+│   ├── hub_state.py        # Hub state management
+│   ├── metrics.py          # Performance metrics
+│   ├── models.py           # Data models
+│   ├── config.py           # Configuration
+│   └── tests/              # Hub unit tests
+│
+├── entity_a/               # Entity Service A (Bank 1)
+│   ├── main.py            # FastAPI server
+│   ├── stream.py          # Transaction generator
+│   ├── risk_engine.py     # Local risk scoring
+│   ├── pattern_classifier.py  # Pattern detection
+│   ├── fingerprint.py     # Fingerprint generation
+│   ├── decision.py        # Decision engine
+│   ├── hub_client.py      # BRIDGE communication
+│   ├── models.py          # Data models
+│   └── tests/             # Entity tests
+│
+├── entity_b/               # Entity Service B (Bank 2)
+│   └── [same as entity_a] # Independent service
+│
 ├── dashboard/
-│   └── bridge-insights/     # React Dashboard
-├── tests/                   # Test suite
-└── run_simulation.py        # Fraud simulator
+│   └── bridge-insights/   # React Dashboard
+│       ├── src/
+│       │   ├── pages/     # Landing, Login, Overview, Patterns, etc.
+│       │   ├── components/  # UI components
+│       │   ├── hooks/     # useHubAPI (mock data)
+│       │   └── data/      # mockDataGenerator.ts
+│       ├── package.json
+│       └── vite.config.ts
+│
+├── shared/                 # Shared utilities
+│   ├── models.py          # Common interfaces
+│   └── utils.py           # Helper functions
+│
+├── tests/                  # Integration tests
+│   ├── integration/       # Multi-service tests
+│   └── fixtures/          # Test data
+│
+├── scripts/                # Utility scripts
+│   └── setup.py
+│
+├── docker-compose.yml      # Multi-container setup
+├── requirements.txt        # Python dependencies
+├── run_simulation.py       # Fraud simulation orchestrator
+└── README.md              # This file
 ```
 
 ---
@@ -210,7 +391,7 @@ Synapse_FI/
 ## 📖 Documentation
 
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design & implementation details  
-- **[dashboard/bridge-insights/README.md](dashboard/bridge-insights/README.md)** - Frontend docs
+- **[dashboard/bridge-insights/README.md](dashboard/README.md)** - Frontend docs
 
 ---
 
@@ -218,30 +399,25 @@ Synapse_FI/
 
 > **SYNAPSE-FI enables institutions to collectively remember fraud strategies without ever remembering the fraudster.**
 
-By modeling fraud as **behavioral intent** (not identity) and sharing **abstractions** (not data):
-- ✅ Effective fraud detection without privacy sacrifice
-- ✅ Regulatory compliance + collective intelligence
-- ✅ Trust without compromising sovereignty
+At the core is **BRIDGE (Behavioral Risk Intent Discovery Engine)** — a novel algorithm that detects **coordinated fraud intent** by correlating **repeated behavioral patterns across institutions**, without sharing data or identities.
 
-**Beyond Fraud:** Extends to healthcare, cybersecurity, supply chain—any domain requiring collaborative intelligence with privacy constraints.
+BRIDGE models fraud as **behavioral intent, not identity**, and shares only **abstract behavior fingerprints**, not transactions.
 
----
+To ensure governance and proportional response, BRIDGE includes a **Pattern Decay Engine**:
 
-## 🤝 Contributing
+* Patterns **lose influence over time** if they stop repeating
+* Intelligence is **never deleted**, only trusted less
+* Influence is instantly restored when behavior reappears
 
-1. Fork repo  
-2. Create branch (`git checkout -b feature/name`)  
-3. Commit (`git commit -m 'Add feature'`)  
-4. Push (`git push origin feature/name`)  
-5. Open Pull Request
+Together, **BRIDGE + Decay** deliver:
 
----
+* Privacy-preserving collective intelligence
+* Explainable, regulator-safe decisions
+* Trust without loss of institutional sovereignty
 
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE)
+**Beyond fraud:** The same paradigm applies to healthcare, cybersecurity, and supply chains—any domain requiring collaboration under strict privacy constraints.
 
 ---
 
-**Built with ❤️ by Team VIT-Vortex**  
+**Built by Team VIT-Vortex**  
 *Privacy-First. Intelligence-Forward. Trust-Enabled.*
